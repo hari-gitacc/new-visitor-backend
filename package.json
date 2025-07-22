@@ -21,5 +21,13 @@
     "nodemon": "^3.1.10",
     "streamifier": "^0.1.1"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hari-gitacc/visitor-backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hari-gitacc/visitor-backend/issues"
+  },
+  "homepage": "https://github.com/hari-gitacc/visitor-backend#readme"
 }
