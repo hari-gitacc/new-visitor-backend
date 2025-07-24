@@ -6,7 +6,7 @@ const getAllVisitors = async (req, res) => {
     try {
         // NEW: Add sorting by createdAt in descending order (newest first)
         const visitors = await Visitor.find({}).sort({ createdAt: -1 }); // Added .sort()
-        console.log("Fetched all visitors:", visitors);
+        console.log();
         
         res.status(200).json({
             message: "Successfully retrieved all visitor data.",

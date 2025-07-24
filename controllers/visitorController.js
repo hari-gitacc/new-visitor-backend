@@ -1,6 +1,7 @@
 const Visitor = require('../models/Visitor');
 const cloudinary = require('cloudinary').v2;
 const streamifier = require('streamifier');
+const sharp = require('sharp'); // Add this for image optimization
 
 // Configure Cloudinary
 cloudinary.config({
@@ -9,16 +10,48 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Optimize image before upload
+const optimizeImage = async (fileBuffer) => {
+  try {
+    // Resize and compress image
+    const optimizedBuffer = await sharp(fileBuffer)
+      .resize(1200, 800, { 
+        fit: 'inside', 
+        withoutEnlargement: true 
+      })
+      .jpeg({ 
+        quality: 85, 
+        progressive: true 
+      })
+      .toBuffer();
+    
+    console.log(`Image optimized: ${fileBuffer.length} bytes -> ${optimizedBuffer.length} bytes`);
+    return optimizedBuffer;
+  } catch (error) {
+    console.error('Image optimization failed:', error);
+    // Return original buffer if optimization fails
+    return fileBuffer;
+  }
+};
 
-// Upload to Cloudinary with better error handling
+// Upload to Cloudinary with better optimization settings
 const uploadToCloudinary = (fileBuffer, filename) => {
   return new Promise((resolve, reject) => {
     const options = {
       folder: 'visitor-cards',
       public_id: filename,
       resource_type: 'image',
-      quality: 'auto',
-      fetch_format: 'auto'
+      quality: 'auto:good',        // Automatic quality optimization
+      fetch_format: 'auto',       // Automatic format optimization
+      flags: 'progressive',       // Progressive JPEG loading
+      transformation: [
+        {
+          width: 1200,
+          height: 800,
+          crop: 'limit',           // Don't upscale images
+          quality: 'auto:good'
+        }
+      ]
     };
 
     const stream = cloudinary.uploader.upload_stream(options, (error, result) => {
@@ -28,35 +61,58 @@ const uploadToCloudinary = (fileBuffer, filename) => {
         console.error('Cloudinary upload error:', error);
         reject(error);
       }
-    })
+    });
 
     streamifier.createReadStream(fileBuffer).pipe(stream);
   });
 };
 
-// Main controller function
+// Main controller function with optimizations
 exports.uploadCard = async (req, res) => {
   try {
     console.log('Upload request received');
     console.log('Body:', req.body);
-    console.log('File:', req.file ? 'File present' : 'No file');
+    console.log('File size:', req.file ? `${(req.file.size / 1024 / 1024).toFixed(2)}MB` : 'No file');
 
-    const { personalPhoneNumber, name, companyPhoneNumber, address, otpVerified, captureMethod } = req.body;
+    const { 
+      personalPhoneNumber, 
+      email,                    // New field
+      companyName,             // New field
+      companyPhoneNumber, 
+      smsVerified,             // Updated from otpVerified
+      captureMethod 
+    } = req.body;
 
-    // Validation
+    // Enhanced validation
     if (!personalPhoneNumber) {
       return res.status(400).json({
         success: false,
         message: 'Personal mobile number is required.'
       });
     }
-    // REMOVED: Name is no longer required here
-    // if (!name) {
+
+    // if (!name || !name.trim()) {
     //   return res.status(400).json({
     //     success: false,
     //     message: 'Name is required.'
     //   });
     // }
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required.'
+      });
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format.'
+      });
+    }
 
     if (!req.file) {
       return res.status(400).json({
@@ -87,49 +143,67 @@ exports.uploadCard = async (req, res) => {
       });
     }
 
-    if (req.file.size > 5 * 1024 * 1024) {
+    // Increased size limit but we'll optimize the image
+    if (req.file.size > 10 * 1024 * 1024) { // 10MB limit
       return res.status(400).json({
         success: false,
-        message: 'File size must be less than 5MB.'
+        message: 'File size must be less than 10MB.'
       });
     }
 
-    console.log('Uploading to Cloudinary...');
+    console.log('Starting image optimization...');
+    const startTime = Date.now();
 
+    // Optimize image before upload
+    const optimizedBuffer = await optimizeImage(req.file.buffer);
+    console.log(`Image optimization completed in ${Date.now() - startTime}ms`);
+
+    // Prepare database operations while uploading
     const filename = `visitor_${personalPhoneNumber}_${Date.now()}`;
+    
+    console.log('Starting Cloudinary upload...');
+    const uploadStartTime = Date.now();
 
-    const uploadResult = await uploadToCloudinary(req.file.buffer, filename);
+    // Parallel operations: Start upload and prepare database query
+    const [uploadResult, existingVisitor] = await Promise.all([
+      uploadToCloudinary(optimizedBuffer, filename),
+      Visitor.findOne({ personalPhoneNumber })
+    ]);
 
-    console.log('Cloudinary upload successful:', uploadResult.secure_url);
+    console.log(`Cloudinary upload completed in ${Date.now() - uploadStartTime}ms`);
+    console.log('Upload successful:', uploadResult.secure_url);
 
-    const existingVisitor = await Visitor.findOne({ personalPhoneNumber });
-
+    // Database operations
     let visitor;
-    if (existingVisitor) {
-      existingVisitor.visitingCardImageUrl = uploadResult.secure_url;
-      existingVisitor.otpVerified = otpVerified === 'true';
-      existingVisitor.captureMethod = captureMethod || 'upload';
-      existingVisitor.name = name || ''; // Set to empty string if not provided
-      existingVisitor.companyPhoneNumber = companyPhoneNumber || '';
-      existingVisitor.address = address || '';
-      existingVisitor.updatedAt = new Date();
+    const visitorData = {
+      personalPhoneNumber,
+      email: email.trim().toLowerCase(),     // New field
+      companyName: companyName?.trim() || '', // New field
+      companyPhoneNumber: companyPhoneNumber || '',
+      visitingCardImageUrl: uploadResult.secure_url,
+      smsVerified: smsVerified === 'true',   // Updated from otpVerified
+      captureMethod: captureMethod || 'upload',
+      emailSent: true,                       // New field
+      updatedAt: new Date()
+    };
 
+    if (existingVisitor) {
+      // Update existing visitor
+      Object.assign(existingVisitor, visitorData);
       visitor = await existingVisitor.save();
       console.log('Existing visitor updated:', visitor._id);
     } else {
+      // Create new visitor
       visitor = new Visitor({
-        personalPhoneNumber,
-        name: name || '', // Set to empty string if not provided
-        companyPhoneNumber: companyPhoneNumber || '',
-        address: address || '',
-        visitingCardImageUrl: uploadResult.secure_url,
-        otpVerified: otpVerified === 'true',
-        captureMethod: captureMethod || 'upload',
+        ...visitorData,
+        createdAt: new Date()
       });
-
       visitor = await visitor.save();
       console.log('New visitor created:', visitor._id);
     }
+
+    const totalTime = Date.now() - startTime;
+    console.log(`Total processing time: ${totalTime}ms`);
 
     res.status(201).json({
       success: true,
@@ -139,13 +213,15 @@ exports.uploadCard = async (req, res) => {
       data: {
         id: visitor._id,
         personalPhoneNumber: visitor.personalPhoneNumber,
-        name: visitor.name,
+        email: visitor.email,                    // New field
+        companyName: visitor.companyName,        // New field
         companyPhoneNumber: visitor.companyPhoneNumber,
-        address: visitor.address,
-        otpVerified: visitor.otpVerified,
+        smsVerified: visitor.smsVerified,        // Updated from otpVerified
         captureMethod: visitor.captureMethod,
+        emailSent: visitor.emailSent,            // New field
         createdAt: visitor.createdAt,
-        updatedAt: visitor.updatedAt
+        updatedAt: visitor.updatedAt,
+        processingTime: `${totalTime}ms`         // Performance metric
       }
     });
 
@@ -156,6 +232,14 @@ exports.uploadCard = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Validation error: ' + error.message
+      });
+    }
+
+    // Handle specific Cloudinary errors
+    if (error.message && error.message.includes('Invalid image file')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid image file. Please upload a valid image.'
       });
     }
 

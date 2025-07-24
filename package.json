@@ -12,6 +12,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@getbrevo/brevo": "^2.5.0",
     "cloudinary": "^2.7.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
@@ -19,6 +20,7 @@
     "mongoose": "^8.16.4",
     "multer": "^2.0.2",
     "nodemon": "^3.1.10",
+    "sharp": "^0.34.3",
     "streamifier": "^0.1.1"
   },
   "repository": {
