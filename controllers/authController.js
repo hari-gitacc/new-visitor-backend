@@ -13,7 +13,7 @@ const adminLogin = (req, res) => {
         // On successful login, send back the API key
         return res.status(200).json({
             message: "Admin login successful!",
-            adminApiKey: process.env.ADMIN_API_KEY
+            adminApiKey: process.env.ADMIN_API_KEY // Use ADMIN_API_KEY from .env
         });
     } else {
         return res.status(401).json({ message: "Invalid credentials." });
@@ -21,19 +21,18 @@ const adminLogin = (req, res) => {
 };
 
 const verifyAdminApiKey = (req, res, next) => {
-    const adminApiKey = req.headers['admin-api-key'];
+    const adminApiKey = req.headers['admin-api-key']; // Expecting static API key
 
     if (!adminApiKey) {
         return res.status(401).json({ message: "Access Denied: No API Key provided." });
     }
 
-    if (adminApiKey === process.env.ADMIN_API_KEY) {
+    if (adminApiKey === process.env.ADMIN_API_KEY) { // Verify against static API key
         next(); // API key is valid, proceed to the next middleware/route handler
     } else {
         return res.status(403).json({ message: "Access Denied: Invalid API Key." });
     }
 };
-
 
 module.exports = {
     adminLogin,

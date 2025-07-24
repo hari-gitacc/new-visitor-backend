@@ -1,12 +1,31 @@
 const mongoose = require('mongoose');
 
 const visitorSchema = new mongoose.Schema({
-  mobileNumber: {
+  personalPhoneNumber: {
     type: String,
-    required: [true, 'Mobile number is required'],
-    unique: false, // Allow multiple entries for same number (updates)
-    match: [/^[6-9]\d{9}$/, 'Invalid mobile number format'],
+    required: [true, 'Personal mobile number is required'],
+    unique: false,
+    match: [/^[6-9]\d{9}$/, 'Invalid personal mobile number format'],
     index: true
+  },
+  name: {
+    type: String,
+    required: [false, 'Name is required'],
+    trim: true,
+    // REMOVED: minlength validation to allow empty string for name
+    maxlength: [100, 'Name cannot exceed 100 characters']
+  },
+  companyPhoneNumber: {
+    type: String,
+    match: [/^[0-9]{10,15}$/, 'Invalid company phone number format'],
+    sparse: true,
+    default: ''
+  },
+  address: {
+    type: String,
+    trim: true,
+    maxlength: [250, 'Address cannot exceed 250 characters'],
+    default: ''
   },
   visitingCardImageUrl: {
     type: String,
@@ -31,7 +50,6 @@ const visitorSchema = new mongoose.Schema({
   }
 });
 
-// Update the updatedAt field before saving
 visitorSchema.pre('save', function(next) {
   if (!this.isNew) {
     this.updatedAt = Date.now();
