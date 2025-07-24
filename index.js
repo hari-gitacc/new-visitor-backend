@@ -18,7 +18,7 @@ app.use(express.json()); // To parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // To parse URL-encoded bodies
 
 // Database connection
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect('mongodb+srv://harisrini777:RGjDUBMwAps7hhpR@visitors.qxu9fyj.mongodb.net/?retryWrites=true&w=majority&appName=visitors')
     .then(() => console.log('MongoDB connected successfully'))
     .catch(err => {
         console.error('MongoDB connection error:', err);
