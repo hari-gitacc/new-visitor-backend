@@ -42,7 +42,9 @@ app.get('/', (req, res) => {
     res.send('Visitor Backend API is running!');
 });
 
-
+app.get('/ping', (req, res) => {
+  res.status(200).send('OK');
+});
 
 
 
