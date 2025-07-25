@@ -130,7 +130,7 @@ app.post('/api/send-welcome-email', async (req, res) => {
     };
     sendSmtpEmail.to = [{ email: email}];
     sendSmtpEmail.replyTo = { 
-      email: process.env.BREVO_REPLY_EMAIL || "support@forzafreedom.com", 
+      email: process.env.BREVO_REPLY_EMAIL || "mathanraj.sr@gmail.com", 
       name: "Forza Freedom Support" 
     };
 
